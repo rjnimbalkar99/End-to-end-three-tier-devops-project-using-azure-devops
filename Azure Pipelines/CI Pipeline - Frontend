@@ -9,7 +9,7 @@ pool:
     - agent.name -equels Agent-1
 
 variables:
-  applicationCodeFrontend: 'Frontend'
+  - group: Three-tier-app-frontend
 
 stages:
   - stage: 'SonarQube-Analysis'

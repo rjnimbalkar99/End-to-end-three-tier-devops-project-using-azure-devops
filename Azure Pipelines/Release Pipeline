@@ -7,6 +7,9 @@ pool:
   demands:
     - agent.name -equles Agent-1
 
+variables:
+  - group: Three-tier-app-release
+
 stages:
   - stage: Create-application-gateway
     jobs:

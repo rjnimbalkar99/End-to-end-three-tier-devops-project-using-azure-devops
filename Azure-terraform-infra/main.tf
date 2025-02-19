@@ -138,6 +138,15 @@ resource "azurerm_network_security_group" "nsg" {
   }
 }
 
+#Create a public ip address.check  
+resource "azurerm_public_ip" "appgw-ip" {
+  name = "appgw-ip"
+  resource_group_name = var.resource_group_name
+  location = "Centralindia"
+  allocation_method = "Static"
+  sku = "Standard"
+}
+
 #Associate the NSG to subnet-1
 resource "azurerm_subnet_network_security_group_association" "nsg-associ" {
   subnet_id = azurerm_subnet.Subnet-1.id

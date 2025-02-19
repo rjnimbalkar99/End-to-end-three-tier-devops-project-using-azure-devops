@@ -9,7 +9,7 @@ pool:
     - agent.name -equels Agent-1
 
 variables:
-  applicationCodeBackend: 'Backend'
+  - group: Three-tier-app-backend
 
 stages:
   - stage: 'SonarQube-Analysis'
