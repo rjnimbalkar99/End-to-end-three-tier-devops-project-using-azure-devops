@@ -1,0 +1,134 @@
+trigger:
+  branches:
+    include:
+      - main
+
+pool:
+  name: demo
+  demands:
+    - agent.name -equels Agent-1
+
+variables:
+  applicationCodeFrontend: 'Frontend'
+
+stages:
+  - stage: 'SonarQube-Analysis'
+    jobs:
+      - job:
+        displayName: 'Static-code-analysis'
+        steps:
+        - task: SonarQubePrepare@7
+          inputs:
+            SonarQube: 'SonarQube URL'
+            scannerMode: 'cli'
+            cliScannerVersion: 'latest'
+            configMode: 'manual'
+            cliProjectKey: '$(SONAR_PROJECT_KEY)'
+            cliProjectName: 'Three-tier-app'
+            cliSources: './Application-Code/Frontend'
+
+        - task: SonarQubeAnalyze@7
+          inputs:
+            jdkversion: 'JAVA_HOME_17_X64'
+
+        - task: SonarQubePublish@7
+          inputs:
+            pollingTimeoutSec: '300'
+
+  - stage: Quality_Gate
+    jobs:
+      - job: Check_Quality_Gate
+        displayName: "Check SonarQube Quality Gate"
+        steps:
+          - script: |
+              curl -u $(SONAR_TOKEN): $(SONAR_HOST_URL)/api/qualitygates/project_status?projectKey=$(SONAR_PROJECT_KEY)
+
+  - stage: 'Dependancy-check'
+    jobs:
+      - job:
+        displayName: 'OWASP-Dependancy-Check'
+        steps:
+          - task: dependency-check-build-task@6
+            inputs:
+              projectName: 'Three-tier-app'
+              scanPath: './Application-Code/Frontend'
+              format: 'XML'
+              uploadReports: false
+  
+  - stage: 'Trivy-File-Scan'
+    jobs:
+      - job:
+        displayName: 'Trivy-filesystem-scanning'
+        steps:            
+          - task: trivy@1
+            inputs:
+              version: 'latest'
+              debug: true
+              type: 'filesystem'
+              path: './Application-Code/Frontend'
+              severities: 'Medium'
+              ignoreUnfixed: true
+              tableOutput: true
+
+  - stage: 'Docker-Build'
+    jobs:
+      - job:
+        displayName: 'Building docker-image'
+        steps:
+          - script: |
+              cd ./Application-Code/Frontend
+              docker system prune -f 
+              docker system container prune -f
+              docker build -t Frontend:$(Build.BuildID)
+
+  - stage: 'Push-TO-ACR'
+    jobs:
+      - job:
+        displayName: 'Pushing-image-to-ACR'
+        steps:            
+        - task: AzureCLI@2
+          inputs:
+            azureSubscription: 'Pay-As-You-Go(a901ae8b-e894-4aca-9782-d872833750e0)'
+            scriptType: 'bash'
+            scriptLocation: 'inlineScript'
+            inlineScript: |
+              az acr login --name $(AZURE_CONTAINER_REGISTRY)
+              docker tag Frontend:$(Build.BuildID)  $(AZURE_CONTAINER_REGISTRY).azurecr.io/$(AZURE_ACR_REPO_NAME):$(Build.BuildID) 
+              docker push  $(AZURE_CONTAINER_REGISTRY).azurecr.io/$(AZURE_ACR_REPO_NAME):$(Build.BuildID)
+
+  - stage: 'Trivy-Image-Scan'
+    jobs:
+      - job: 
+        displayName: 'Scanning-docker-image'
+        steps:
+        - task: trivy@1
+          inputs:
+            version: 'latest'
+            exitCode: '0'
+            debug: true
+            image: '$(AZURE_CONTAINER_REGISTRY)/$(AZURE_ACR_REPO_NAME):$(Build.BuildID)'
+            severities: 'MEDIUM'
+            ignoreUnfixed: true
+            tableOutput: true
+  
+  - stage: 'Updating-Deployment-File'
+    jobs:
+      - job: 
+        displayName: 'Update Deployment Manifest in Azure Repo'
+        steps:
+          - checkout: Self
+            persistCredentials: true
+            env:
+              SYSTEM_ACCESSTOKEN: $(System.AccessToken)
+          - script: | 
+              git config user.name $(GIT_USERNAME)
+              git config user.email $(GIT_EMAILID)
+
+              #To update the K8S deployment file
+              cd ./Kubernetes/Frontend/deployment.yaml
+              sed -i 's/$(AZURE_CONTAINER_REGISTRY):[0-9]\+.azurecr.io/$(AZURE_ACR_REPO_NAME):$(Build.BuildID)'
+              git add ./Kubernetes/Frontend/deployment.yaml
+              git commit -m "Update deployment Image to version $(Build.BuildID)"
+
+              #To push the chnages to Azure repo
+              git push https://$(System.AccessToken)@dev.azure.com/your-org/your-project/_git/your-repo HEAD:main

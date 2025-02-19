@@ -1,0 +1,48 @@
+trigger:
+  branches:
+    include:
+      - main
+
+pool:
+  name: demo
+  demands:
+    - agent.name -equels Agent-1
+
+variables:
+  applicationCodeBackend: 'Backend'
+
+stages:
+  - stage: 
+    jobs:
+      - job:
+        displayName: 'Building Docker image'
+        steps:
+        - task: 
+
+  - stage: 'Docker-Build'
+    jobs:
+      - job:
+        displayName: 'Building Docker image'
+        steps:
+          - task: Docker@2
+            inputs:
+              containerRegistry: 'azureimageregistry'
+              repository: 'three-tier-app'
+              command: 'buildAndPush'
+              Dockerfile: '**/Dockerfile'
+              buildContext: 'Application-code/Backend'
+              addPipelineData: false
+              addBaseImageData: false
+            
+  - stage: 'Image-Scan'
+    jobs:
+      - job:
+        displayName: 'Trivy-image-scanning'
+        steps:            
+          - task: trivy@1
+            inputs:
+              version: 'latest'
+              debug: true
+              image: 'azureimageregistory.azurecr.io/three-tier-app:backend'
+              severities: 'Medium'
+              tableOutput: true'

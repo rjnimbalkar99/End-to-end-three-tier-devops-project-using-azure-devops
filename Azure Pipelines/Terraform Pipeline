@@ -1,0 +1,60 @@
+trigger:
+  branches:
+    include:
+      - main
+
+pool:
+  name: demo
+  demands:
+    - agent.name -equals Agent-1
+
+parameters:
+- name: Terraform_Action
+  type: string
+  default: 'apply'
+  values:
+    - apply
+    - destroy
+
+variables:
+  terraformDirectory: 'Azure-terraform-infra'  
+
+stages:
+ - stage: 'Terraform_Deployment'
+   jobs:
+     - job: 'Terraform_job'
+       steps:
+       - task: TerraformTaskV4@4
+         displayName: 'Terraform_init'
+         inputs:
+           provider: 'azurerm'
+           command: 'init'
+           workingDirectory: '$(terraformDirectory)'
+           backendServiceArm: 'Terraform-client'
+           backendAzureRmResourceGroupName: 'terraform-backend'
+           backendAzureRmStorageAccountName: 'terraformbackend789'
+           backendAzureRmContainerName: 'tfstate'
+           backendAzureRmKey: 'terraform.tfstate'
+          
+       - task: TerraformTaskV4@4
+         inputs:
+          provider: 'azurerm'
+          command: 'validate'
+          workingDirectory: '$(terraformDirectory)'
+        
+       - task: TerraformTaskV4@4
+         inputs:
+           provider: 'azurerm'
+           command: 'plan'
+           workingDirectory: '$(terraformDirectory)'
+           commandOptions: '-var-file=variables.tfvars'
+           environmentServiceNameAzureRM: 'Terraform-client'
+      
+       - task: TerraformTaskV4@4
+         displayName: 'Terraform_Action'
+         inputs:
+           provider: 'azurerm'
+           command: '${{ parameters.Terraform_Action }}'
+           workingDirectory: '$(terraformDirectory)'
+           commandOptions: '-var-file=variables.tfvars -auto-approve'
+           environmentServiceNameAzureRM: 'Terraform-client'

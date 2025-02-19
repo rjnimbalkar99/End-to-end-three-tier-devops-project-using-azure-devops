@@ -1,0 +1,17 @@
+services:
+  backend:
+    image: backend
+    container_name: backend
+    ports:
+      - "3500:3500" #Expose backend on host port 3500, mapped to container port 3500
+
+  frontend:
+    image: frontend
+    container_name: frontend
+    ports:
+      - "3000:3000"  # Assuming frontend runs on port 3000
+    environment:
+      REACT_APP_API_URL: "http://backend:3500"  # Correct placement inside frontend
+    depends_on:
+      backend:
+        condition: service_started 
