@@ -33,7 +33,7 @@ resource "azurerm_subnet" "Subnet-2" {
 
 #Create Azure container registory for backend.
 resource "azurerm_container_registry" "ACR-1" {
-  name = "azureimageregistory-backend"
+  name = "azureimageregistorybackend"
   resource_group_name = var.resource_group_name
   location = "Centralindia"
   sku = "Standard"
@@ -42,7 +42,7 @@ resource "azurerm_container_registry" "ACR-1" {
 
 #Create Azure container registory for frontend.
 resource "azurerm_container_registry" "ACR-2" {
-  name = "azureimageregistory-frontend"
+  name = "azureimageregistoryfrontend"
   resource_group_name = var.resource_group_name
   location = "Centralindia"
   sku = "Standard"
@@ -56,7 +56,7 @@ resource "azurerm_kubernetes_cluster" "aks" {
   location            = "Centralindia"
   resource_group_name = var.resource_group_name
   dns_prefix          = "Three-tier-application"
-  depends_on = [ azurerm_subnet_network_security_group_association.nsg-associ ]
+  depends_on = [ azurerm_subnet_network_security_group_association.nsg-associ-2 ]
 
   default_node_pool {
     name                = "system"
@@ -78,7 +78,7 @@ resource "azurerm_kubernetes_cluster" "aks" {
 }
 
 #Assign role to AKS cluster for accessing the ACR-1
-resource "azurerm_role_assignment" "managed-identity" {
+resource "azurerm_role_assignment" "managed-identity-1" {
   role_definition_name = "AcrPull"
   scope = azurerm_container_registry.ACR-1.id
   principal_id = azurerm_kubernetes_cluster.aks.identity[0].principal_id
@@ -86,7 +86,7 @@ resource "azurerm_role_assignment" "managed-identity" {
 }
 
 #Assign role to AKS cluster for accessing the ACR-2
-resource "azurerm_role_assignment" "managed-identity" {
+resource "azurerm_role_assignment" "managed-identity-2" {
   role_definition_name = "AcrPull"
   scope = azurerm_container_registry.ACR-2.id
   principal_id = azurerm_kubernetes_cluster.aks.identity[0].principal_id
@@ -138,23 +138,14 @@ resource "azurerm_network_security_group" "nsg" {
   }
 }
 
-#Create a public ip address.check  
-resource "azurerm_public_ip" "appgw-ip" {
-  name = "appgw-ip"
-  resource_group_name = var.resource_group_name
-  location = "Centralindia"
-  allocation_method = "Static"
-  sku = "Standard"
-}
-
 #Associate the NSG to subnet-1
-resource "azurerm_subnet_network_security_group_association" "nsg-associ" {
+resource "azurerm_subnet_network_security_group_association" "nsg-associ-1" {
   subnet_id = azurerm_subnet.Subnet-1.id
   network_security_group_id = azurerm_network_security_group.nsg.id
 }
 
 #Associate the NSG to subnet-2 
-resource "azurerm_subnet_network_security_group_association" "nsg-associ" {
+resource "azurerm_subnet_network_security_group_association" "nsg-associ-2" {
   subnet_id = azurerm_subnet.Subnet-2.id
   network_security_group_id = azurerm_network_security_group.nsg.id
 }

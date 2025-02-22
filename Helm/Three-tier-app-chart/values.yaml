@@ -1,0 +1,26 @@
+replicaCount: 3
+
+image: 
+  backend:
+    repository: azureimageregistorybackend.azurecr.io/backend
+    pullPolicy: IfNotPresent
+    # Overrides the image tag whose default is the chart appVersion.
+    tag: "$(Build.BuildID)"
+  frontend:
+    repository: azureimageregistoryfrontend.azurecr.io/frontend
+    pullPolicy: IfNotPresent
+    # Overrides the image tag whose default is the chart appVersion.
+    tag: "$(Build.BuildID)"
+  
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+    # kubernetes.io/ingress.class: nginx
+    # kubernetes.io/tls-acme: "true"
+  hosts:
+    - host: to-do-list.com
+      paths:
+        - path: /
+          pathType: ImplementationSpecific

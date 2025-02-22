@@ -3,8 +3,12 @@ trigger:
     include:
       - main
 
+  paths:
+   include:
+     - ./Azure-terraform-infra
+
 pool:
-  name: demo
+  name: default
   demands:
     - agent.name -equals Agent-1
 
@@ -32,7 +36,7 @@ stages:
            workingDirectory: '$(terraformDirectory)'
            backendServiceArm: 'Terraform-client'
            backendAzureRmResourceGroupName: 'terraform-backend'
-           backendAzureRmStorageAccountName: 'terraformbackend789'
+           backendAzureRmStorageAccountName: 'terraformbackend12'
            backendAzureRmContainerName: 'tfstate'
            backendAzureRmKey: 'terraform.tfstate'
           

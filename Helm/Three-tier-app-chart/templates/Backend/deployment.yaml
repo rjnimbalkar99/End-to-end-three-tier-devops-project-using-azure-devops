@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
       - name: api
-        image: azureimageregistory.azurecr.io/backend:$(Build.BuildID)
+        image: {{ .Values.image.backend.repository }} : {{.Values.image.backend.tag }}
         imagePullPolicy: Always
         ports:
         - containerPort: 3500

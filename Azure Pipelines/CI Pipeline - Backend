@@ -3,28 +3,34 @@ trigger:
     include:
       - main
 
+  paths:
+    include:
+      - ./Application-Code/Backend
+
 pool:
-  name: demo
+  name: default
   demands:
-    - agent.name -equels Agent-1
+    - agent.name -equals Agent-1
 
 variables:
   - group: Three-tier-app-backend
 
 stages:
-  - stage: 'SonarQube-Analysis'
+  - stage: 'SonarQube_Analysis'
     jobs:
       - job:
-        displayName: 'Static-code-analysis'
+        displayName: 'Static_code_analysis'
         steps:
+        - script: sudo apt update && sudo apt install unzip -y
+          displayName: 'Install unzip'
         - task: SonarQubePrepare@7
           inputs:
-            SonarQube: 'SonarQube URL'
+            SonarQube: 'Sonarqube-server'
             scannerMode: 'cli'
-            cliScannerVersion: 'latest'
+            cliScannerVersion: '7.0.2.4839'
             configMode: 'manual'
             cliProjectKey: '$(SONAR_PROJECT_KEY)'
-            cliProjectName: 'Three-tier-app'
+            cliProjectName: 'Three-tier-app-backend'
             cliSources: './Application-Code/Backend'
 
         - task: SonarQubeAnalyze@7
@@ -43,78 +49,80 @@ stages:
           - script: |
               curl -u $(SONAR_TOKEN): $(SONAR_HOST_URL)/api/qualitygates/project_status?projectKey=$(SONAR_PROJECT_KEY)
 
-  - stage: 'Dependancy-check'
+  - stage: 'Dependancy_check'
     jobs:
       - job:
-        displayName: 'OWASP-Dependancy-Check'
+        displayName: 'OWASP_Dependancy_Check'
         steps:
           - task: dependency-check-build-task@6
             inputs:
-              projectName: 'Three-tier-app'
+              projectName: 'Three-tier-app-backend'
               scanPath: './Application-Code/Backend'
               format: 'XML'
               uploadReports: false
   
-  - stage: 'Trivy-File-Scan'
+  - stage: 'Trivy_File_Scan'
     jobs:
       - job:
-        displayName: 'Trivy-filesystem-scanning'
+        displayName: 'Trivy_filesystem_scanning'
         steps:            
           - task: trivy@1
             inputs:
+              trivyImage: 'aquasec/trivy:latest'
               version: 'latest'
+              exitCode: '0'
               debug: true
               type: 'filesystem'
               path: './Application-Code/Backend'
-              severities: 'Medium'
+              severities: 'MEDIUM'
               ignoreUnfixed: true
               tableOutput: true
 
-  - stage: 'Docker-Build'
+  - stage: 'Docker_Build'
     jobs:
       - job:
-        displayName: 'Building docker-image'
+        displayName: 'Building_docker_image'
         steps:
           - script: |
               cd ./Application-Code/Backend
               docker system prune -f 
-              docker system container prune -f
-              docker build -t Backend:$(Build.BuildID)
+              docker system container prune -f 
+              docker build -t backend:$(Build.BuildID) .
 
-  - stage: 'Push-TO-ACR'
+  - stage: 'Push_TO_ACR'
     jobs:
       - job:
-        displayName: 'Pushing-image-to-ACR'
+        displayName: 'Pushing_image_to_ACR'
         steps:            
         - task: AzureCLI@2
           inputs:
-            azureSubscription: 'Pay-As-You-Go(a901ae8b-e894-4aca-9782-d872833750e0)'
+            azureSubscription: 'Terraform-client'
             scriptType: 'bash'
             scriptLocation: 'inlineScript'
             inlineScript: |
               az acr login --name $(AZURE_CONTAINER_REGISTRY)
-              docker tag Backend:$(Build.BuildID)  $(AZURE_CONTAINER_REGISTRY).azurecr.io/$(AZURE_ACR_REPO_NAME):$(Build.BuildID) 
+              docker tag backend:$(Build.BuildID)  $(AZURE_CONTAINER_REGISTRY).azurecr.io/$(AZURE_ACR_REPO_NAME):$(Build.BuildID) 
               docker push  $(AZURE_CONTAINER_REGISTRY).azurecr.io/$(AZURE_ACR_REPO_NAME):$(Build.BuildID)
 
-  - stage: 'Trivy-Image-Scan'
+  - stage: 'Trivy_Image_Scan'
     jobs:
       - job: 
-        displayName: 'Scanning-docker-image'
+        displayName: 'Scanning_docker_image'
         steps:
         - task: trivy@1
           inputs:
             version: 'latest'
             exitCode: '0'
             debug: true
-            image: '$(AZURE_CONTAINER_REGISTRY)/$(AZURE_ACR_REPO_NAME):$(Build.BuildID)'
+            image: '$(AZURE_CONTAINER_REGISTRY).azurecr.io/$(AZURE_ACR_REPO_NAME):$(Build.BuildID)'
             severities: 'MEDIUM'
             ignoreUnfixed: true
             tableOutput: true
   
-  - stage: 'Updating-Deployment-File'
+  - stage: 'Updating_Deployment_File'
     jobs:
       - job: 
-        displayName: 'Update Deployment Manifest in Azure Repo'
+        displayName: 'Update_Deployment_Manifest_in_Azure_Repo'
         steps:
           - checkout: Self
             persistCredentials: true
@@ -125,10 +133,10 @@ stages:
               git config user.email $(GIT_EMAILID)
 
               #To update the K8S deployment file
-              cd ./Kubernetes/Backend/deployment.yaml
-              sed -i 's/$(AZURE_CONTAINER_REGISTRY):[0-9]\+.azurecr.io/$(AZURE_ACR_REPO_NAME):$(Build.BuildID)'
-              git add ./Kubernetes/Backend/deployment.yaml
-              git commit -m "Update deployment Image to version $(Build.BuildID)"
+              cd ./Helm/Three-tier-app-chart
+              sed -i 's/\(backend:\s*[^#]*tag:\s*\).*/\1"$(Build.BuildID)"/' values.yaml
+              git add values.yaml
+              git commit -m "Update values.yaml Image to version $(Build.BuildID)"
 
               #To push the chnages to Azure repo
-              git push https://$(System.AccessToken)@dev.azure.com/your-org/your-project/_git/your-repo HEAD:main
+              git push https://$(System.AccessToken)@dev.azure.com/rjnimbalkar321/Demo/_git/End-to-end-three-tier-devops-project-using-azure-devops HEAD:main

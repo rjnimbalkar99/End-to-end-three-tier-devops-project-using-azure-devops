@@ -3,61 +3,22 @@ trigger:
   include:
     - main
 
-pool:
+ paths:
+   include:
+     - ./Helm/Three-tier-app-chart
+
+pool: 
+  name: default
   demands:
-    - agent.name -equles Agent-1
+    - agent.name -equals Agent-1
 
 variables:
   - group: Three-tier-app-release
 
 stages:
-  - stage: Create-application-gateway
+  - stage: Application_deployment
     jobs:
-      - job: Azure-cli-tasks
-        displayName: 'Creating-application-gateway'
-        steps:
-          - task: AzureCLI@2
-            inputs:
-              azureSubscription: 'Pay-As-You-Go(a901ae8b-e894-4aca-9782-d872833750e0)'
-              scriptType: 'bash'
-              scriptLocation: 'inlineScript'
-              inlineScript: |
-                
-                az network application-gateway create \
-                  --name appgw-1 \
-                  --location $LOCATION \
-                  --resource-group $RESOURCE_GROUP \
-                  --vnet-name $VNET_NAME \
-                  --subnet $SUBNET \
-                  --public-ip-address $PUBLIC_IP \
-                  --sku Standard_v2 \
-                  --capacity 2
-  
-  - stage: Deploy_AGIC
-    jobs:
-      - job: Helm-tasks
-        displayName: 'Install Application Gateway Ingress Controller'
-        steps:
-          - task: HelmInstaller@0
-            displayName: 'Install Helm'
-            inputs:
-              helmVersion: 'latest'
-          
-          - script: |
-              helm repo add application-gateway-kubernetes-ingress \
-                  https://appgwingress.blob.core.windows.net/ingress-azure-helm-package/
-              helm repo update
-              helm install ingress-azure application-gateway-kubernetes-ingress/ingress-azure \
-                  --set appgw.subscriptionId=$(SUBSCRIPTION_ID) \
-                  --set appgw.resourceGroup=$(RESOURCE_GROUP) \
-                  --set appgw.name=appgw-1 \
-                  --set appgw.usePrivateIP=false \
-                  --set kubernetes.watchNamespace=$(NAMESPACE)
-
-
-  - stage: Application-deployment
-    jobs:
-      - job: Kuberctl-tasks
+      - job: Kuberctl_tasks
         displayName: 'Deployment of backend & database of the application on AKS Cluster'
         steps:
           - task: KubectlInstaller@0
@@ -66,38 +27,30 @@ stages:
 
           - task: AzureCLI@2
             inputs:
-              azureSubscription: 'Pay-As-You-Go(a901ae8b-e894-4aca-9782-d872833750e0)'
+              azureSubscription: 'Terraform-client'
               scriptType: 'bash'
               scriptLocation: 'inlineScript'
-              inlineScript: 
-                'az aks credentials --resource-group $RESOURCE_GROUP  --name $AKS_CLUSTER_NAME'
+              inlineScript: 'az aks get-credentials --resource-group $RESOURCE_GROUP  --name $AKS_CLUSTER_NAME --overwrite-existing'
 
-          - script: |
-              #Deploy the Database of the application on cluster.
-              cd ./Application-Code/Database
-              Kubectl create namespace Three-tier-app || true
-              Kubectl config set-context --current --namespace Three-tier-app
-              Kubectl apply -f pvc.yaml
-              Kubectl apply -f pv.yaml
-              Kubectl apply -f secret.yaml
-              Kubectl apply -f service.yaml
-              Kubectl apply -f deployment.yaml
-              Kubectl get all 
+          - script: 
+              kubectl create namespace three-tier-app || true
+              kubectl config set-context --current --namespace three-tier-app
 
-              #Deploy the Backend of the application on cluster.
-              cd ../Backend
-              Kubectl apply -f service.yaml
-              Kubectl apply -f deployment.yaml
-              Kubectl get all
-
-              #Deploy the frontend of the application on cluster.
-              cd ../frontend
-              Kubectl apply -f service.yaml
-              Kubectl apply -f deployment.yaml
-              Kubectl get all
-
-              #Deploy the ingress file.
-              cd ..
-              Kubectl apply -f ingress.yaml 
+  - stage: Helm_chart_deployment
+    jobs:
+      - job: Helm_tasks
+        displayName: 'Deployment of backend, database & frontend of the application on AKS Cluster'
+        steps:
+          - script: 
+              cd ./Helm
+              kubectl create namespace three-tier-app || true
+              kubectl config set-context --current --namespace three-tier-app
+              helm install Three-tier-app ./Three-tier-app-chart --set image.tag=$(Build.BuildID)
+              kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/cloud/deploy.yaml
 
 
+
+
+
+
+         
